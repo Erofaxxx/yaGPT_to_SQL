@@ -1,0 +1,118 @@
+Напиши программу python, которая по сообщению пользователя передаёт его в Yandex gpt, который должен на основе запроса сгенерировать sql запрос к таблице ClickHouse. При этом, у агента должен быть констекст в виде того, какие столбцы есть в ClickHouse, данные там из Яндекс метрики(уже выгружены в ClickHouse).
+
+То есть программа дает агенту окружение(описание содержания таблицы какие столбцы и что в них, название таблицы, название базы данных) и запрос пользователя. А Yandex gpt должен уже вернуть в качестве ответа, sql запрос к ClickHouse, который поможет выгрузить данные, которые в последующем помогут ответить на вопрос пользователя. Нужно учитывать, что этот sql запрос может быть использован для выгрузки среза данных и будет далее обрабатываться python кодом. То есть не обязательно полностью сразу всё вычислять в sql, дальше возможно будет проще некоторые моменты анализировать с помощью python. 
+
+
+Документация вlickhouse https://clickhouse.com/docs/integrations/python
+Смотри еще документацию по Yandex gpt
+
+
+
+ 
+Пример кода
+ Синхронная генерация SQL (простой HTTP-запрос)
+
+
+
+import requests
+
+def generate_clickhouse_sql(prompt_text: str, api_key: str, folder_id: str) -> str:
+    url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
+    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Api-Key {api_key}"
+    }
+    
+    prompt = {
+        "modelUri": f"gpt:///{folder_id}/yandexgpt-lite",
+        "completionOptions": {
+            "temperature": 0.3,
+            "maxTokens": "500"
+        },
+        "messages": [
+            {
+                "role": "system",
+                "text": "Ты эксперт по ClickHouse SQL. Пиши оптимальные, производительные запросы с учетом движков таблиц и партиционирования."
+            },
+            {
+                "role": "user",
+                "text": prompt_text
+            }
+        ]
+    }
+    
+    response = requests.post(url, headers=headers, json=prompt)
+    if response.status_code == 200:
+        result = response.json()
+        return result["result"]["alternatives"][0]["message"]["text"]
+    else:
+        raise Exception(f"Ошибка API: {response.status_code}, {response.text}")
+
+# Пример использования
+if __name__ == "__main__":
+    API_KEY = "ваш_api_ключ"
+    FOLDER_ID = "ваш_идентификатор_каталога"
+    
+    user_request = "Напиши запрос, который найдёт топ-5 самых активных пользователей по количеству событий за последние 7 дней, с группировкой по стране."
+    
+    try:
+        sql = generate_clickhouse_sql(user_request, API_KEY, FOLDER_ID)
+        print("Сгенерированный SQL:")
+        print(sql)
+    except Exception as e:
+        print(f"Ошибка: {e}")
+
+
+ 2. Асинхронная генерация с SDK (для высокой нагрузки)
+
+from yandex_ai_studio_sdk import AIStudio
+import time
+
+def generate_sql_async(user_request: str, folder_id: str, api_key: str):
+    sdk = AIStudio(
+        folder_id=folder_id,
+        auth=api_key
+    )
+    
+    model = sdk.models.completions("yandexgpt-lite")
+    model = model.configure(temperature=0.3)
+    
+    # Асинхронный вызов
+    operation = model.run_deferred([
+        {
+            "role": "system",
+            "text": "Ты генератор SQL для ClickHouse. Учитывай производительность, партиционирование и движки таблиц."
+        },
+        {
+            "role": "user",
+            "text": user_request
+        }
+    ])
+    
+    # Ожидание результата
+    print("Ожидание генерации...")
+    result = operation.wait(timeout=30)
+    
+    return result.alternatives[0].text
+
+# Пример использования
+if __name__ == "__main__":
+    FOLDER_ID = "ваш_идентификатор_каталога"
+    API_KEY = "ваш_api_ключ"
+    
+    request = "Составь запрос, который агрегирует данные по сессиям пользователей за вчера, с фильтрацией по мобильным устройствам и сортировкой по длительности."
+
+    try:
+        sql = generate_sql_async(request, FOLDER_ID, API_KEY)
+        print("Сгенерированный SQL:")
+        print(sql)
+    except Exception as e:
+        print(f"Ошибка: {e}")
+
+
+
+
+
+ 
+
