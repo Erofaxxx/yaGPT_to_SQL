@@ -4,7 +4,7 @@ yaGPT to SQL - Program for generating ClickHouse SQL queries using Yandex GPT
 
 import os
 import requests
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import json
 
 
@@ -23,7 +23,7 @@ class YandexGPTSQLGenerator:
         self.folder_id = folder_id
         self.api_url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
     
-    def build_context(self, table_info: Dict[str, any]) -> str:
+    def build_context(self, table_info: Dict[str, Any]) -> str:
         """
         Build context message with table information
         
@@ -59,7 +59,7 @@ class YandexGPTSQLGenerator:
         
         return context
     
-    def generate_sql(self, user_request: str, table_info: Dict[str, any], 
+    def generate_sql(self, user_request: str, table_info: Dict[str, Any], 
                      temperature: float = 0.3, max_tokens: int = 500) -> str:
         """
         Generate SQL query based on user request
@@ -159,13 +159,13 @@ class ClickHouseHelper:
             # Parse response - assuming FORMAT JSON or JSONEachRow
             try:
                 return response.json()
-            except:
+            except (json.JSONDecodeError, ValueError):
                 # If not JSON, return raw text
                 return [{"result": response.text}]
         else:
             raise Exception(f"Ошибка выполнения запроса: {response.status_code}, {response.text}")
     
-    def get_table_info(self, table_name: str) -> Dict[str, any]:
+    def get_table_info(self, table_name: str) -> Dict[str, Any]:
         """
         Get table structure information
         
@@ -175,6 +175,11 @@ class ClickHouseHelper:
         Returns:
             Dictionary with table information
         """
+        # Basic validation to prevent SQL injection
+        # Table names should only contain alphanumeric characters and underscores
+        if not table_name.replace('_', '').isalnum():
+            raise ValueError(f"Invalid table name: {table_name}. Only alphanumeric characters and underscores are allowed.")
+        
         query = f"""
         SELECT 
             name,
