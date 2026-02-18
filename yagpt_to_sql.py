@@ -56,16 +56,18 @@ def clean_sql_query(sql_text: str) -> str:
 class YandexGPTSQLGenerator:
     """Class for generating ClickHouse SQL queries using Yandex GPT"""
     
-    def __init__(self, api_key: str, folder_id: str):
+    def __init__(self, api_key: str, folder_id: str, model: str = "yandexgpt-lite"):
         """
         Initialize the SQL generator
         
         Args:
             api_key: Yandex Cloud API key
             folder_id: Yandex Cloud folder ID
+            model: Model to use (yandexgpt-lite, yandexgpt, yandexgpt-latest)
         """
         self.api_key = api_key
         self.folder_id = folder_id
+        self.model = model
         self.api_url = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
     
     def build_context(self, table_info: Dict[str, Any]) -> str:
@@ -78,53 +80,89 @@ class YandexGPTSQLGenerator:
         Returns:
             Formatted context string
         """
-        context = f"""Ты эксперт по ClickHouse SQL. Пиши простые, понятные запросы. Используй простой синтаксис везде, где возможно.
+        # Based on recommendations from Yandex WebSQL Concierge (see Yandex_assistant_prompt.txt)
+        context = f"""Ты — SQL-эксперт для ClickHouse. Твоя задача — генерировать правильные, простые и эффективные SQL-запросы.
 
-ВАЖНО: ClickHouse имеет свою специфику и синтаксис:
-
-Системные таблицы ClickHouse:
-- system.columns: содержит столбцы `database`, `table`, `name`, `type`, `comment` (НЕ column_name, НЕ data_type, НЕ table_name!)
-- system.tables: содержит столбцы `database`, `name`, `engine`, `create_table_query`
-- system.databases: содержит столбцы `name`, `engine`, `data_path`
-
-ПРИМЕРЫ ПРОСТЫХ ЗАПРОСОВ (используй такие):
-- Список столбцов: SELECT name, type FROM system.columns WHERE database = 'db' AND table = 'table' FORMAT JSON
-- Список таблиц: SELECT name, engine FROM system.tables WHERE database = 'db' FORMAT JSON
-- Простая выборка: SELECT col1, col2 FROM table WHERE condition FORMAT JSON
-- Агрегация: SELECT col1, COUNT(*) FROM table GROUP BY col1 FORMAT JSON
-
-Дополнительные возможности ClickHouse (используй ТОЛЬКО при необходимости):
-- Функции для массивов: arrayJoin, groupArray, arrayMap (только если нужно работать с массивами!)
-- Движки таблиц: MergeTree, ReplacingMergeTree (для понимания структуры данных)
-- PARTITION BY - для работы с партициями
-- GLOBAL JOIN - только для распределённых запросов
-
-Информация о таблице:
-- База данных: {table_info.get('database', 'default')}
-- Таблица: {table_info.get('table', 'unknown')}
-- Описание: {table_info.get('description', 'Таблица содержит данные из Яндекс Метрики')}
-
-Структура таблицы:
-"""
+КОНТЕКСТ БАЗЫ ДАННЫХ (JSON):
+{{
+  "databaseType": "clickhouse",
+  "databaseName": "{table_info.get('database', 'default')}",
+  "tableName": "{table_info.get('table', 'unknown')}",
+  "description": "{table_info.get('description', 'Таблица содержит данные из Яндекс Метрики')}",
+  "columns": ["""
         
         columns = table_info.get('columns', [])
         if columns:
-            for col in columns:
+            for i, col in enumerate(columns):
                 col_name = col.get('name', '')
                 col_type = col.get('type', '')
                 col_desc = col.get('description', '')
-                context += f"\n- {col_name} ({col_type})"
+                context += f'\n    {{"name": "{col_name}", "type": "{col_type}"'
                 if col_desc:
-                    context += f": {col_desc}"
-        else:
-            context += "\n(Информация о столбцах недоступна)"
+                    context += f', "description": "{col_desc}"'
+                context += '}'
+                if i < len(columns) - 1:
+                    context += ','
         
-        context += "\n\nУчитывай, что SQL запрос будет использоваться для выгрузки среза данных, которые затем будут обрабатываться Python кодом. Не обязательно полностью всё вычислять в SQL."
-        context += "\n\nПРИНЦИПЫ:"
-        context += "\n1. Пиши простые запросы - не усложняй без необходимости!"
-        context += "\n2. ОБЯЗАТЕЛЬНО добавляй FORMAT JSON в конец каждого SELECT запроса!"
-        context += "\n3. Используй базовый SELECT/WHERE/GROUP BY везде, где возможно!"
-        context += "\n4. Сложные функции (arrayJoin, arrayMap и т.д.) - только если действительно нужны!"
+        context += """
+  ]
+}
+
+ВАЖНО: ClickHouse - специфичная СУБД!
+
+Системные таблицы ClickHouse (используй ТОЛЬКО эти имена столбцов):
+- system.columns: `database`, `table`, `name`, `type`, `comment`, `position`
+  ❌ НЕ используй: column_name, data_type, table_name (это НЕ ClickHouse!)
+- system.tables: `database`, `name`, `engine`, `create_table_query`
+
+ПРИМЕРЫ ПРАВИЛЬНЫХ ЗАПРОСОВ:
+
+1. Список столбцов таблицы:
+   SELECT name, type 
+   FROM system.columns 
+   WHERE database = 'db' AND table = 'table'
+   ORDER BY position
+   FORMAT JSON
+
+2. Простая выборка данных:
+   SELECT col1, col2, col3 
+   FROM table_name 
+   WHERE condition
+   LIMIT 100
+   FORMAT JSON
+
+3. Агрегация:
+   SELECT col1, COUNT(*) as cnt 
+   FROM table_name 
+   GROUP BY col1 
+   ORDER BY cnt DESC
+   FORMAT JSON
+
+4. Работа с датами (ClickHouse специфика):
+   SELECT toYYYYMM(date_col) as month, COUNT(*) 
+   FROM table_name 
+   WHERE date_col >= today() - 30
+   GROUP BY month
+   FORMAT JSON
+
+ЗАПРЕЩЕННЫЕ конструкции (генерируют ОШИБКИ):
+❌ arrayJoin(map(x -> x.name, ...)) - некорректный синтаксис!
+❌ groupArray(system.columns) - нельзя группировать строки так!
+❌ map(x -> x.name, x -> x.type, ...) - неправильное использование map()!
+
+Дополнительные возможности (используй ТОЛЬКО если явно нужно):
+- Массивы: groupArray(), arrayJoin() - только для работы с массивами
+- Функции дат: today(), yesterday(), toStartOfMonth()
+- PARTITION BY - только если спрашивают про партиции
+
+ПРИНЦИПЫ ГЕНЕРАЦИИ:
+1. ПРОСТОТА: используй базовый SELECT/WHERE/GROUP BY
+2. FORMAT JSON: ОБЯЗАТЕЛЬНО добавляй в конец каждого SELECT
+3. НЕ УСЛОЖНЯЙ: избегай lambda-функций и сложных конструкций без необходимости
+4. ПРОВЕРЯЙ: используй только существующие столбцы из контекста выше
+5. ЧИТАЕМОСТЬ: пиши SQL, который легко понять
+
+Теперь сгенерируй ПРОСТОЙ и ПРАВИЛЬНЫЙ SQL для запроса пользователя."""
         
         return context
     
@@ -153,7 +191,7 @@ class YandexGPTSQLGenerator:
         system_context = self.build_context(table_info)
         
         payload = {
-            "modelUri": f"gpt://{self.folder_id}/yandexgpt-lite",
+            "modelUri": f"gpt://{self.folder_id}/{self.model}",
             "completionOptions": {
                 "temperature": temperature,
                 "maxTokens": str(max_tokens)
@@ -389,6 +427,7 @@ def main():
     # Load configuration from environment variables
     API_KEY = os.getenv("YANDEX_API_KEY", "your_api_key_here")
     FOLDER_ID = os.getenv("YANDEX_FOLDER_ID", "your_folder_id_here")
+    YANDEX_MODEL = os.getenv("YANDEX_GPT_MODEL", "yandexgpt")  # yandexgpt, yandexgpt-lite, yandexgpt-latest
     
     # ClickHouse configuration
     CH_HOST = os.getenv("CLICKHOUSE_HOST", "localhost")
@@ -421,7 +460,8 @@ def main():
     
     # Initialize components
     logging.info("Инициализация компонентов...")
-    sql_generator = YandexGPTSQLGenerator(API_KEY, FOLDER_ID)
+    logging.info(f"Используется модель: {YANDEX_MODEL}")
+    sql_generator = YandexGPTSQLGenerator(API_KEY, FOLDER_ID, YANDEX_MODEL)
     ch_helper = ClickHouseHelper(CH_HOST, CH_PORT, CH_USER, CH_PASSWORD, CH_DATABASE, CH_SSL_CERT)
     
     # Get table information
