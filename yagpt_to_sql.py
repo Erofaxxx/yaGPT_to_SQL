@@ -118,7 +118,7 @@ class ClickHouseHelper:
     
     def __init__(self, host: str = "localhost", port: int = 8123, 
                  user: str = "default", password: str = "", database: str = "default",
-                 verify_ssl: bool = True):
+                 ssl_cert_path: str = None):
         """
         Initialize ClickHouse helper
         
@@ -128,14 +128,26 @@ class ClickHouseHelper:
             user: Database user
             password: Database password
             database: Database name
-            verify_ssl: Whether to verify SSL certificates (default: True)
+            ssl_cert_path: Path to SSL certificate file for verification (e.g., 'YandexInternalRootCA.crt')
+                          If None or empty, uses default system certificates
+                          Set to False to disable SSL verification (not recommended)
         """
         self.host = host
         self.port = port
         self.user = user
         self.password = password
         self.database = database
-        self.verify_ssl = verify_ssl
+        
+        # Handle SSL certificate path
+        if ssl_cert_path is False:
+            # Explicitly disabled
+            self.verify_ssl = False
+        elif ssl_cert_path:
+            # Use provided certificate file
+            self.verify_ssl = ssl_cert_path
+        else:
+            # Default: use system certificates
+            self.verify_ssl = True
         
         # Construct base URL - handle if host already includes protocol
         if host.startswith('http://') or host.startswith('https://'):
@@ -147,10 +159,15 @@ class ClickHouseHelper:
         
         logging.info(f"ClickHouse connection: {self.base_url}, database: {database}")
         
-        # Warn if SSL verification is disabled
-        if not verify_ssl and self.base_url.startswith('https://'):
-            logging.warning("⚠️  SSL certificate verification ОТКЛЮЧЕНА! Это небезопасно для продакшена.")
-            logging.warning("⚠️  SSL certificate verification DISABLED! This is insecure for production.")
+        # Log SSL configuration
+        if self.base_url.startswith('https://'):
+            if self.verify_ssl is False:
+                logging.warning("⚠️  SSL certificate verification ОТКЛЮЧЕНА! Это небезопасно для продакшена.")
+                logging.warning("⚠️  SSL certificate verification DISABLED! This is insecure for production.")
+            elif isinstance(self.verify_ssl, str):
+                logging.info(f"✓ SSL verification enabled with certificate: {self.verify_ssl}")
+            else:
+                logging.info("✓ SSL verification enabled with system certificates")
     
     def execute_query(self, query: str, timeout: int = None) -> List[Dict]:
         """
@@ -296,10 +313,20 @@ def main():
     CH_DATABASE = os.getenv("CLICKHOUSE_DATABASE", "default")
     CH_TABLE = os.getenv("CLICKHOUSE_TABLE", "metrika_hits")
     
-    # SSL verification (default: True for security)
-    # Set to "false" or "0" to disable SSL verification (not recommended for production)
-    ssl_verify_str = os.getenv("CLICKHOUSE_SSL_VERIFY", "true").lower()
-    CH_SSL_VERIFY = ssl_verify_str not in ["false", "0", "no", "off"]
+    # SSL certificate configuration
+    # Priority: CLICKHOUSE_SSL_CERT_PATH > CLICKHOUSE_SSL_VERIFY
+    ssl_cert_path = os.getenv("CLICKHOUSE_SSL_CERT_PATH", "")
+    
+    if ssl_cert_path:
+        # Use specified certificate file
+        CH_SSL_CERT = ssl_cert_path
+    else:
+        # Check old CLICKHOUSE_SSL_VERIFY for backwards compatibility
+        ssl_verify_str = os.getenv("CLICKHOUSE_SSL_VERIFY", "true").lower()
+        if ssl_verify_str in ["false", "0", "no", "off"]:
+            CH_SSL_CERT = False  # Disabled
+        else:
+            CH_SSL_CERT = None  # Use system certificates
     
     print("=== yaGPT to SQL Generator ===")
     print(f"База данных: {CH_DATABASE}")
@@ -309,7 +336,7 @@ def main():
     # Initialize components
     logging.info("Инициализация компонентов...")
     sql_generator = YandexGPTSQLGenerator(API_KEY, FOLDER_ID)
-    ch_helper = ClickHouseHelper(CH_HOST, CH_PORT, CH_USER, CH_PASSWORD, CH_DATABASE, CH_SSL_VERIFY)
+    ch_helper = ClickHouseHelper(CH_HOST, CH_PORT, CH_USER, CH_PASSWORD, CH_DATABASE, CH_SSL_CERT)
     
     # Get table information
     print("Получение информации о таблице...")

@@ -39,9 +39,19 @@ CH_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "")
 CH_DATABASE = os.getenv("CLICKHOUSE_DATABASE", "default")
 CH_TABLE = os.getenv("CLICKHOUSE_TABLE", "metrika_hits")
 
-# SSL verification (default: True for security)
-ssl_verify_str = os.getenv("CLICKHOUSE_SSL_VERIFY", "true").lower()
-CH_SSL_VERIFY = ssl_verify_str not in ["false", "0", "no", "off"]
+# SSL certificate configuration
+ssl_cert_path = os.getenv("CLICKHOUSE_SSL_CERT_PATH", "")
+
+if ssl_cert_path:
+    # Use specified certificate file
+    CH_SSL_CERT = ssl_cert_path
+else:
+    # Check old CLICKHOUSE_SSL_VERIFY for backwards compatibility
+    ssl_verify_str = os.getenv("CLICKHOUSE_SSL_VERIFY", "true").lower()
+    if ssl_verify_str in ["false", "0", "no", "off"]:
+        CH_SSL_CERT = False  # Disabled
+    else:
+        CH_SSL_CERT = None  # Use system certificates
 
 print(f"Configuration:")
 print(f"  Host: {CH_HOST}")
@@ -49,16 +59,26 @@ print(f"  Port: {CH_PORT}")
 print(f"  User: {CH_USER}")
 print(f"  Database: {CH_DATABASE}")
 print(f"  Table: {CH_TABLE}")
-print(f"  SSL Verify: {CH_SSL_VERIFY}")
+if isinstance(CH_SSL_CERT, str):
+    print(f"  SSL Certificate: {CH_SSL_CERT}")
+elif CH_SSL_CERT is False:
+    print(f"  SSL Verify: Disabled")
+else:
+    print(f"  SSL Verify: System certificates")
 print()
 
 # Test 1: Initialize ClickHouse helper
 print("Test 1: Initialize ClickHouse helper")
 print("-" * 70)
 try:
-    ch_helper = ClickHouseHelper(CH_HOST, CH_PORT, CH_USER, CH_PASSWORD, CH_DATABASE, CH_SSL_VERIFY)
+    ch_helper = ClickHouseHelper(CH_HOST, CH_PORT, CH_USER, CH_PASSWORD, CH_DATABASE, CH_SSL_CERT)
     print(f"✓ Base URL: {ch_helper.base_url}")
-    print(f"✓ SSL Verify: {ch_helper.verify_ssl}")
+    if isinstance(ch_helper.verify_ssl, str):
+        print(f"✓ SSL Certificate: {ch_helper.verify_ssl}")
+    elif ch_helper.verify_ssl is False:
+        print(f"✓ SSL Verify: Disabled")
+    else:
+        print(f"✓ SSL Verify: System certificates")
     print()
 except Exception as e:
     print(f"✗ Failed to initialize: {e}")
