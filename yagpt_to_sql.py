@@ -78,7 +78,7 @@ class YandexGPTSQLGenerator:
         Returns:
             Formatted context string
         """
-        context = f"""Ты эксперт по ClickHouse SQL. Пиши оптимальные, производительные запросы с учетом движков таблиц и партиционирования.
+        context = f"""Ты эксперт по ClickHouse SQL. Пиши простые, понятные запросы. Используй простой синтаксис везде, где это возможно.
 
 ВАЖНО: ClickHouse имеет свою специфику и синтаксис:
 
@@ -87,12 +87,17 @@ class YandexGPTSQLGenerator:
 - system.tables: содержит столбцы `database`, `name`, `engine`, `create_table_query`
 - system.databases: содержит столбцы `name`, `engine`, `data_path`
 
-Особенности синтаксиса ClickHouse:
-- Для всех запросов добавляй FORMAT JSON в конце для получения результата в JSON формате
-- Используй функции arrayJoin, groupArray, arrayMap для работы с массивами
-- Движки таблиц: MergeTree, ReplacingMergeTree, SummingMergeTree, AggregatingMergeTree
-- Для партиционирования используй PARTITION BY
-- Для оптимизации JOIN используй GLOBAL JOIN или словари
+ПРИМЕРЫ ПРОСТЫХ ЗАПРОСОВ (используй такие):
+- Список столбцов: SELECT name, type FROM system.columns WHERE database = 'db' AND table = 'table' FORMAT JSON
+- Список таблиц: SELECT name, engine FROM system.tables WHERE database = 'db' FORMAT JSON
+- Простая выборка: SELECT col1, col2 FROM table WHERE condition FORMAT JSON
+- Агрегация: SELECT col1, COUNT(*) FROM table GROUP BY col1 FORMAT JSON
+
+Дополнительные возможности ClickHouse (используй ТОЛЬКО при необходимости):
+- Функции для массивов: arrayJoin, groupArray, arrayMap (только если нужно работать с массивами!)
+- Движки таблиц: MergeTree, ReplacingMergeTree (для понимания структуры данных)
+- PARTITION BY - для работы с партициями
+- GLOBAL JOIN - только для распределённых запросов
 
 Информация о таблице:
 - База данных: {table_info.get('database', 'default')}
@@ -115,7 +120,11 @@ class YandexGPTSQLGenerator:
             context += "\n(Информация о столбцах недоступна)"
         
         context += "\n\nУчитывай, что SQL запрос будет использоваться для выгрузки среза данных, которые затем будут обрабатываться Python кодом. Не обязательно полностью всё вычислять в SQL."
-        context += "\n\nОБЯЗАТЕЛЬНО добавляй FORMAT JSON в конец каждого SELECT запроса!"
+        context += "\n\nПРИНЦИПЫ:"
+        context += "\n1. Пиши простые запросы - не усложняй без необходимости!"
+        context += "\n2. ОБЯЗАТЕЛЬНО добавляй FORMAT JSON в конец каждого SELECT запроса!"
+        context += "\n3. Используй базовый SELECT/WHERE/GROUP BY везде, где возможно"
+        context += "\n4. Сложные функции (arrayJoin, arrayMap и т.д.) - только если действительно нужны!"
         
         return context
     
