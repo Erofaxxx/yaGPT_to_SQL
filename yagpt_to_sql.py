@@ -80,6 +80,20 @@ class YandexGPTSQLGenerator:
         """
         context = f"""Ты эксперт по ClickHouse SQL. Пиши оптимальные, производительные запросы с учетом движков таблиц и партиционирования.
 
+ВАЖНО: ClickHouse имеет свою специфику и синтаксис:
+
+Системные таблицы ClickHouse:
+- system.columns: содержит столбцы `database`, `table`, `name`, `type`, `comment` (НЕ column_name, НЕ data_type, НЕ table_name!)
+- system.tables: содержит столбцы `database`, `name`, `engine`, `create_table_query`
+- system.databases: содержит столбцы `name`, `engine`, `data_path`
+
+Особенности синтаксиса ClickHouse:
+- Для всех запросов добавляй FORMAT JSON в конце для получения результата в JSON формате
+- Используй функции arrayJoin, groupArray, arrayMap для работы с массивами
+- Движки таблиц: MergeTree, ReplacingMergeTree, SummingMergeTree, AggregatingMergeTree
+- Для партиционирования используй PARTITION BY
+- Для оптимизации JOIN используй GLOBAL JOIN или словари
+
 Информация о таблице:
 - База данных: {table_info.get('database', 'default')}
 - Таблица: {table_info.get('table', 'unknown')}
@@ -101,6 +115,7 @@ class YandexGPTSQLGenerator:
             context += "\n(Информация о столбцах недоступна)"
         
         context += "\n\nУчитывай, что SQL запрос будет использоваться для выгрузки среза данных, которые затем будут обрабатываться Python кодом. Не обязательно полностью всё вычислять в SQL."
+        context += "\n\nОБЯЗАТЕЛЬНО добавляй FORMAT JSON в конец каждого SELECT запроса!"
         
         return context
     
@@ -230,6 +245,12 @@ class ClickHouseHelper:
         """
         if timeout is None:
             timeout = int(os.getenv("CLICKHOUSE_TIMEOUT", "30"))
+        
+        # Ensure FORMAT JSON is present for SELECT queries
+        query_upper = query.strip().upper()
+        if query_upper.startswith('SELECT') and 'FORMAT' not in query_upper:
+            query = query.strip() + ' FORMAT JSON'
+            logging.debug("Added FORMAT JSON to query")
         
         params = {
             "user": self.user,
