@@ -4,14 +4,17 @@ Test script to verify error logging and connection handling
 """
 
 import os
-import sys
 import logging
 from dotenv import load_dotenv
 
-# Add current directory to path to import yagpt_to_sql
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from yagpt_to_sql import ClickHouseHelper
+# Import from current directory
+try:
+    from yagpt_to_sql import ClickHouseHelper
+except ImportError:
+    import sys
+    # Add current directory to path only if import fails
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from yagpt_to_sql import ClickHouseHelper
 
 # Configure logging
 logging.basicConfig(

@@ -200,16 +200,25 @@ python yagpt_to_sql.py
    python test_connection.py
    ```
 
-2. **Убедитесь, что хост включает протокол для HTTPS:**
+2. **Убедитесь, что хост настроен правильно:**
+   
+   Программа поддерживает два формата указания хоста:
+   
+   **С указанием протокола (рекомендуется для облачных сервисов):**
    ```
-   # Правильно для Yandex Managed ClickHouse:
+   # Yandex Managed ClickHouse (HTTPS + порт 8443)
    CLICKHOUSE_HOST=https://your-cluster.mdb.yandexcloud.net
    CLICKHOUSE_PORT=8443
+   ```
    
-   # Для локального ClickHouse:
+   **Без указания протокола (для локальных серверов):**
+   ```
+   # Локальный ClickHouse (HTTP + порт 8123)
    CLICKHOUSE_HOST=localhost
    CLICKHOUSE_PORT=8123
    ```
+   
+   **Важно:** Для защищенных подключений (HTTPS) обязательно укажите `https://` в начале хоста.
 
 3. **Проверьте права доступа:**
    - Таблица существует в указанной базе данных

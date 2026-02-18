@@ -144,12 +144,13 @@ class ClickHouseHelper:
         
         logging.info(f"ClickHouse connection: {self.base_url}, database: {database}")
     
-    def execute_query(self, query: str) -> List[Dict]:
+    def execute_query(self, query: str, timeout: int = None) -> List[Dict]:
         """
         Execute SQL query and return results
         
         Args:
             query: SQL query to execute
+            timeout: Request timeout in seconds (default from env or 30)
             
         Returns:
             List of dictionaries with query results
@@ -157,6 +158,9 @@ class ClickHouseHelper:
         Raises:
             Exception: If query execution fails
         """
+        if timeout is None:
+            timeout = int(os.getenv("CLICKHOUSE_TIMEOUT", "30"))
+        
         params = {
             "user": self.user,
             "password": self.password,
@@ -168,7 +172,7 @@ class ClickHouseHelper:
         logging.debug(f"Query: {query[:200]}...")  # Log first 200 chars
         
         try:
-            response = requests.get(self.base_url, params=params, timeout=10)
+            response = requests.get(self.base_url, params=params, timeout=timeout)
             
             if response.status_code == 200:
                 # Parse response - assuming FORMAT JSON or JSONEachRow
@@ -256,9 +260,15 @@ def main():
     """Main function - example usage"""
     
     # Configure logging
-    log_level = os.getenv("LOG_LEVEL", "INFO")
+    log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+    # Validate log level
+    valid_levels = ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
+    if log_level not in valid_levels:
+        print(f"⚠ Неверный уровень логирования '{log_level}', используется INFO")
+        log_level = "INFO"
+    
     logging.basicConfig(
-        level=getattr(logging, log_level.upper()),
+        level=getattr(logging, log_level),
         format='%(asctime)s - %(levelname)s - %(message)s',
         datefmt='%H:%M:%S'
     )
