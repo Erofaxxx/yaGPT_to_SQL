@@ -247,10 +247,20 @@ class ClickHouseHelper:
             timeout = int(os.getenv("CLICKHOUSE_TIMEOUT", "30"))
         
         # Ensure FORMAT JSON is present for SELECT queries
-        query_upper = query.strip().upper()
-        if query_upper.startswith('SELECT') and 'FORMAT' not in query_upper:
-            query = query.strip() + ' FORMAT JSON'
-            logging.debug("Added FORMAT JSON to query")
+        # Check the main query (not subqueries) to avoid duplication
+        query_stripped = query.strip()
+        query_upper = query_stripped.upper()
+        
+        # Check if this is a SELECT query and doesn't already have FORMAT at the end
+        if query_upper.startswith('SELECT'):
+            # Check if FORMAT is at the end of the query (not in subqueries)
+            # Look for FORMAT in the last 50 characters to avoid matching subqueries
+            query_end = query_upper[-50:] if len(query_upper) > 50 else query_upper
+            if 'FORMAT' not in query_end:
+                query = query_stripped + ' FORMAT JSON'
+                logging.debug("Added FORMAT JSON to query")
+            else:
+                query = query_stripped
         
         params = {
             "user": self.user,
