@@ -56,14 +56,15 @@ def clean_sql_query(sql_text: str) -> str:
 class YandexGPTSQLGenerator:
     """Class for generating ClickHouse SQL queries using Yandex GPT"""
     
-    def __init__(self, api_key: str, folder_id: str, model: str = "yandexgpt-lite"):
+    def __init__(self, api_key: str, folder_id: str, model: str = "yandexgpt"):
         """
         Initialize the SQL generator
         
         Args:
             api_key: Yandex Cloud API key
             folder_id: Yandex Cloud folder ID
-            model: Model to use (yandexgpt-lite, yandexgpt, yandexgpt-latest)
+            model: Model to use (yandexgpt, yandexgpt-lite, yandexgpt-latest)
+                  Default is yandexgpt (full model) for better SQL generation
         """
         self.api_key = api_key
         self.folder_id = folder_id
@@ -81,32 +82,34 @@ class YandexGPTSQLGenerator:
             Formatted context string
         """
         # Based on recommendations from Yandex WebSQL Concierge (see Yandex_assistant_prompt.txt)
+        import json as json_module
+        
+        # Build JSON context safely
+        json_context = {
+            "databaseType": "clickhouse",
+            "databaseName": table_info.get('database', 'default'),
+            "tableName": table_info.get('table', 'unknown'),
+            "description": table_info.get('description', 'Таблица содержит данные из Яндекс Метрики'),
+            "columns": []
+        }
+        
+        columns = table_info.get('columns', [])
+        for col in columns:
+            col_entry = {
+                "name": col.get('name', ''),
+                "type": col.get('type', '')
+            }
+            if col.get('description'):
+                col_entry["description"] = col.get('description')
+            json_context["columns"].append(col_entry)
+        
+        # Convert to formatted JSON string
+        json_context_str = json_module.dumps(json_context, ensure_ascii=False, indent=2)
+        
         context = f"""Ты — SQL-эксперт для ClickHouse. Твоя задача — генерировать правильные, простые и эффективные SQL-запросы.
 
 КОНТЕКСТ БАЗЫ ДАННЫХ (JSON):
-{{
-  "databaseType": "clickhouse",
-  "databaseName": "{table_info.get('database', 'default')}",
-  "tableName": "{table_info.get('table', 'unknown')}",
-  "description": "{table_info.get('description', 'Таблица содержит данные из Яндекс Метрики')}",
-  "columns": ["""
-        
-        columns = table_info.get('columns', [])
-        if columns:
-            for i, col in enumerate(columns):
-                col_name = col.get('name', '')
-                col_type = col.get('type', '')
-                col_desc = col.get('description', '')
-                context += f'\n    {{"name": "{col_name}", "type": "{col_type}"'
-                if col_desc:
-                    context += f', "description": "{col_desc}"'
-                context += '}'
-                if i < len(columns) - 1:
-                    context += ','
-        
-        context += """
-  ]
-}
+{json_context_str}
 
 ВАЖНО: ClickHouse - специфичная СУБД!
 
