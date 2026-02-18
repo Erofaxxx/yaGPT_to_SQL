@@ -78,7 +78,7 @@ class YandexGPTSQLGenerator:
         Returns:
             Formatted context string
         """
-        context = f"""Ты эксперт по ClickHouse SQL. Пиши простые, понятные запросы. Используй простой синтаксис везде, где это возможно.
+        context = f"""Ты эксперт по ClickHouse SQL. Пиши простые, понятные запросы. Используй простой синтаксис везде, где возможно.
 
 ВАЖНО: ClickHouse имеет свою специфику и синтаксис:
 
@@ -123,7 +123,7 @@ class YandexGPTSQLGenerator:
         context += "\n\nПРИНЦИПЫ:"
         context += "\n1. Пиши простые запросы - не усложняй без необходимости!"
         context += "\n2. ОБЯЗАТЕЛЬНО добавляй FORMAT JSON в конец каждого SELECT запроса!"
-        context += "\n3. Используй базовый SELECT/WHERE/GROUP BY везде, где возможно"
+        context += "\n3. Используй базовый SELECT/WHERE/GROUP BY везде, где возможно!"
         context += "\n4. Сложные функции (arrayJoin, arrayMap и т.д.) - только если действительно нужны!"
         
         return context
