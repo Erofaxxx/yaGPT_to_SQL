@@ -115,9 +115,36 @@ class YandexGPTSQLGenerator:
         if response.status_code == 200:
             result = response.json()
             sql_query = result["result"]["alternatives"][0]["message"]["text"]
-            return sql_query.strip()
+            return self._clean_sql_response(sql_query)
         else:
             raise Exception(f"Ошибка API Yandex GPT: {response.status_code}, {response.text}")
+
+    def _clean_sql_response(self, sql_text: str) -> str:
+        """
+        Clean SQL response from markdown formatting and extra whitespace.
+
+        Args:
+            sql_text: Raw SQL text from API response
+
+        Returns:
+            Cleaned SQL query
+        """
+        # Remove markdown code blocks
+        sql_text = sql_text.strip()
+
+        # Remove ```sql or ``` markdown markers
+        if sql_text.startswith("```sql"):
+            sql_text = sql_text[6:]
+        elif sql_text.startswith("```"):
+            sql_text = sql_text[3:]
+
+        if sql_text.endswith("```"):
+            sql_text = sql_text[:-3]
+
+        # Strip whitespace
+        sql_text = sql_text.strip()
+
+        return sql_text
 
     def _build_system_prompt(self, table_schema: ClickHouseTableSchema) -> str:
         """Build system prompt for the AI."""
@@ -128,9 +155,19 @@ class YandexGPTSQLGenerator:
 1. Пиши производительные запросы с учетом движков таблиц и партиционирования
 2. Используй агрегатные функции ClickHouse когда это уместно
 3. Помни, что результаты могут быть далее обработаны в Python, поэтому не обязательно делать всю логику в SQL
-4. Возвращай только SQL запрос без дополнительных объяснений
+4. Возвращай только SQL запрос без дополнительных объяснений и без markdown форматирования (без ```sql или ```)
 5. Используй корректный синтаксис ClickHouse
-6. Учитывай структуру данных Яндекс Метрики"""
+6. Учитывай структуру данных Яндекс Метрики
+
+ВАЖНО - Синтаксис для системных таблиц ClickHouse:
+- Системные таблицы находятся в базе данных 'system' (НЕ в пользовательской базе)
+- Правильный синтаксис: SELECT name, type FROM system.columns WHERE database = 'database_name' AND table = 'table_name'
+- НЕПРАВИЛЬНО: FROM database_name.system.columns WHERE table = 'table_name'
+- FORMAT JSON можно добавлять в конец запроса, если нужен JSON формат
+- Примеры корректных запросов к системным таблицам:
+  * SELECT name, type FROM system.columns WHERE database = 'mydb' AND table = 'mytable'
+  * SELECT name FROM system.tables WHERE database = 'mydb'
+  * SELECT * FROM system.databases"""
 
     def _build_user_prompt(self, user_request: str, table_schema: ClickHouseTableSchema) -> str:
         """Build user prompt with context."""
