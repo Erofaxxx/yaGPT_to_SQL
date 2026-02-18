@@ -160,6 +160,18 @@ yaGPT_to_SQL/
 - [Yandex GPT API](https://cloud.yandex.ru/docs/yandexgpt/)
 - [ClickHouse Python Driver](https://clickhouse.com/docs/integrations/python)
 - [Яндекс Метрика](https://metrika.yandex.ru/)
+- [ClickHouse System Tables Guide](SYSTEM_TABLES_GUIDE.md) - Руководство по работе с системными таблицами ClickHouse
+
+## Известные проблемы и решения
+
+### Ошибка синтаксиса при запросе к системным таблицам
+
+Если вы получаете ошибку вида:
+```
+Syntax error: failed at position 65 (WHERE) (line 6, col 1): WHERE table = 'visits_complete'
+```
+
+Это означает, что сгенерирован неправильный запрос к системной таблице. Обновленная версия программы включает исправления для корректной генерации таких запросов. См. [SYSTEM_TABLES_GUIDE.md](SYSTEM_TABLES_GUIDE.md) для деталей.
 
 ## Лицензия
 
