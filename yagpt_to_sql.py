@@ -117,7 +117,8 @@ class ClickHouseHelper:
     """Helper class for working with ClickHouse"""
     
     def __init__(self, host: str = "localhost", port: int = 8123, 
-                 user: str = "default", password: str = "", database: str = "default"):
+                 user: str = "default", password: str = "", database: str = "default",
+                 verify_ssl: bool = True):
         """
         Initialize ClickHouse helper
         
@@ -127,12 +128,14 @@ class ClickHouseHelper:
             user: Database user
             password: Database password
             database: Database name
+            verify_ssl: Whether to verify SSL certificates (default: True)
         """
         self.host = host
         self.port = port
         self.user = user
         self.password = password
         self.database = database
+        self.verify_ssl = verify_ssl
         
         # Construct base URL - handle if host already includes protocol
         if host.startswith('http://') or host.startswith('https://'):
@@ -143,6 +146,11 @@ class ClickHouseHelper:
             self.base_url = f"http://{host}:{port}"
         
         logging.info(f"ClickHouse connection: {self.base_url}, database: {database}")
+        
+        # Warn if SSL verification is disabled
+        if not verify_ssl and self.base_url.startswith('https://'):
+            logging.warning("⚠️  SSL certificate verification ОТКЛЮЧЕНА! Это небезопасно для продакшена.")
+            logging.warning("⚠️  SSL certificate verification DISABLED! This is insecure for production.")
     
     def execute_query(self, query: str, timeout: int = None) -> List[Dict]:
         """
@@ -172,7 +180,7 @@ class ClickHouseHelper:
         logging.debug(f"Query: {query[:200]}...")  # Log first 200 chars
         
         try:
-            response = requests.get(self.base_url, params=params, timeout=timeout)
+            response = requests.get(self.base_url, params=params, timeout=timeout, verify=self.verify_ssl)
             
             if response.status_code == 200:
                 # Parse response - assuming FORMAT JSON or JSONEachRow
@@ -288,6 +296,11 @@ def main():
     CH_DATABASE = os.getenv("CLICKHOUSE_DATABASE", "default")
     CH_TABLE = os.getenv("CLICKHOUSE_TABLE", "metrika_hits")
     
+    # SSL verification (default: True for security)
+    # Set to "false" or "0" to disable SSL verification (not recommended for production)
+    ssl_verify_str = os.getenv("CLICKHOUSE_SSL_VERIFY", "true").lower()
+    CH_SSL_VERIFY = ssl_verify_str not in ["false", "0", "no", "off"]
+    
     print("=== yaGPT to SQL Generator ===")
     print(f"База данных: {CH_DATABASE}")
     print(f"Таблица: {CH_TABLE}")
@@ -296,7 +309,7 @@ def main():
     # Initialize components
     logging.info("Инициализация компонентов...")
     sql_generator = YandexGPTSQLGenerator(API_KEY, FOLDER_ID)
-    ch_helper = ClickHouseHelper(CH_HOST, CH_PORT, CH_USER, CH_PASSWORD, CH_DATABASE)
+    ch_helper = ClickHouseHelper(CH_HOST, CH_PORT, CH_USER, CH_PASSWORD, CH_DATABASE, CH_SSL_VERIFY)
     
     # Get table information
     print("Получение информации о таблице...")
