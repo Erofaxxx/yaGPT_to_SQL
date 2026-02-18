@@ -22,14 +22,32 @@ def clean_sql_query(sql_text: str) -> str:
         Cleaned SQL query without markdown formatting
     """
     # Remove markdown code blocks (```sql ... ``` or ``` ... ```)
-    # Pattern matches: optional "```" + optional language identifier + newline + content + "```"
-    cleaned = re.sub(r'^```[\w]*\n?', '', sql_text, flags=re.MULTILINE)
-    cleaned = re.sub(r'\n?```$', '', cleaned, flags=re.MULTILINE)
+    # This handles the common case where Yandex GPT wraps SQL in code blocks
     
-    # Also handle inline code blocks at start/end
-    cleaned = cleaned.strip('`')
+    cleaned = sql_text.strip()
     
-    # Strip leading/trailing whitespace
+    # Check if starts with ``` and ends with ```
+    if cleaned.startswith('```') and cleaned.endswith('```'):
+        # Remove opening marker: ``` or ```sql or ```python etc.
+        lines = cleaned.split('\n', 1)
+        if len(lines) > 1 and lines[0].startswith('```'):
+            # Remove first line (opening marker)
+            cleaned = lines[1]
+        else:
+            # Single line or no newline after opening marker
+            cleaned = cleaned[3:]  # Remove opening ```
+        
+        # Remove closing marker: ```
+        if cleaned.endswith('```'):
+            lines = cleaned.rsplit('\n', 1)
+            if len(lines) > 1 and lines[-1] == '```':
+                # Remove last line (closing marker)
+                cleaned = lines[0]
+            else:
+                # No newline before closing marker
+                cleaned = cleaned[:-3]
+    
+    # Strip any remaining whitespace
     cleaned = cleaned.strip()
     
     return cleaned
