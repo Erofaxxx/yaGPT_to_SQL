@@ -6,6 +6,7 @@ import os
 import requests
 from typing import Dict, List, Optional, Any
 import json
+from dotenv import load_dotenv
 
 
 class YandexGPTSQLGenerator:
@@ -220,6 +221,9 @@ class ClickHouseHelper:
 
 def main():
     """Main function - example usage"""
+    
+    # Load environment variables from .env file
+    load_dotenv()
     
     # Load configuration from environment variables
     API_KEY = os.getenv("YANDEX_API_KEY", "your_api_key_here")
