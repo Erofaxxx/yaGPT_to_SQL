@@ -8,6 +8,31 @@ from typing import Dict, List, Optional, Any
 import json
 from dotenv import load_dotenv
 import logging
+import re
+
+
+def clean_sql_query(sql_text: str) -> str:
+    """
+    Clean SQL query by removing markdown code blocks and extra whitespace
+    
+    Args:
+        sql_text: SQL query text that may contain markdown formatting
+        
+    Returns:
+        Cleaned SQL query without markdown formatting
+    """
+    # Remove markdown code blocks (```sql ... ``` or ``` ... ```)
+    # Pattern matches: optional "```" + optional language identifier + newline + content + "```"
+    cleaned = re.sub(r'^```[\w]*\n?', '', sql_text, flags=re.MULTILINE)
+    cleaned = re.sub(r'\n?```$', '', cleaned, flags=re.MULTILINE)
+    
+    # Also handle inline code blocks at start/end
+    cleaned = cleaned.strip('`')
+    
+    # Strip leading/trailing whitespace
+    cleaned = cleaned.strip()
+    
+    return cleaned
 
 
 class YandexGPTSQLGenerator:
@@ -371,7 +396,11 @@ def main():
         if execute == 'y':
             print("\nВыполнение запроса...")
             try:
-                results = ch_helper.execute_query(sql_query)
+                # Clean the SQL query to remove markdown formatting
+                cleaned_sql = clean_sql_query(sql_query)
+                logging.debug(f"Cleaned SQL: {cleaned_sql}")
+                
+                results = ch_helper.execute_query(cleaned_sql)
                 print("\nРезультаты:")
                 print(json.dumps(results, indent=2, ensure_ascii=False))
             except Exception as e:
