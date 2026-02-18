@@ -7,6 +7,7 @@ import requests
 from typing import Dict, List, Optional, Any
 import json
 from dotenv import load_dotenv
+import logging
 
 
 class YandexGPTSQLGenerator:
@@ -121,7 +122,7 @@ class ClickHouseHelper:
         Initialize ClickHouse helper
         
         Args:
-            host: ClickHouse host
+            host: ClickHouse host (can include protocol like https://...)
             port: ClickHouse HTTP port
             user: Database user
             password: Database password
@@ -132,7 +133,16 @@ class ClickHouseHelper:
         self.user = user
         self.password = password
         self.database = database
-        self.base_url = f"http://{host}:{port}"
+        
+        # Construct base URL - handle if host already includes protocol
+        if host.startswith('http://') or host.startswith('https://'):
+            # Host already includes protocol
+            self.base_url = f"{host}:{port}"
+        else:
+            # Default to http if no protocol specified
+            self.base_url = f"http://{host}:{port}"
+        
+        logging.info(f"ClickHouse connection: {self.base_url}, database: {database}")
     
     def execute_query(self, query: str) -> List[Dict]:
         """
@@ -154,17 +164,30 @@ class ClickHouseHelper:
             "query": query
         }
         
-        response = requests.get(self.base_url, params=params)
+        logging.debug(f"Executing query to {self.base_url}")
+        logging.debug(f"Query: {query[:200]}...")  # Log first 200 chars
         
-        if response.status_code == 200:
-            # Parse response - assuming FORMAT JSON or JSONEachRow
-            try:
-                return response.json()
-            except (json.JSONDecodeError, ValueError):
-                # If not JSON, return raw text
-                return [{"result": response.text}]
-        else:
-            raise Exception(f"Ошибка выполнения запроса: {response.status_code}, {response.text}")
+        try:
+            response = requests.get(self.base_url, params=params, timeout=10)
+            
+            if response.status_code == 200:
+                # Parse response - assuming FORMAT JSON or JSONEachRow
+                try:
+                    result = response.json()
+                    logging.debug(f"Query successful, response type: {type(result)}")
+                    return result
+                except (json.JSONDecodeError, ValueError) as e:
+                    # If not JSON, return raw text
+                    logging.warning(f"Response is not JSON: {e}")
+                    return [{"result": response.text}]
+            else:
+                error_msg = f"Ошибка выполнения запроса: {response.status_code}, {response.text}"
+                logging.error(error_msg)
+                raise Exception(error_msg)
+        except requests.exceptions.RequestException as e:
+            error_msg = f"Ошибка соединения с ClickHouse: {e}"
+            logging.error(error_msg)
+            raise Exception(error_msg)
     
     def get_table_info(self, table_name: str) -> Dict[str, Any]:
         """
@@ -192,6 +215,7 @@ class ClickHouseHelper:
         """
         
         try:
+            logging.info(f"Запрос структуры таблицы: {self.database}.{table_name}")
             response = self.execute_query(query)
             columns = []
             
@@ -202,6 +226,10 @@ class ClickHouseHelper:
                         'type': row.get('type', ''),
                         'description': row.get('comment', '')
                     })
+                logging.info(f"Найдено столбцов: {len(columns)}")
+            else:
+                logging.warning(f"Неожиданный формат ответа: {type(response)}")
+                logging.debug(f"Response content: {response}")
             
             return {
                 'database': self.database,
@@ -210,7 +238,12 @@ class ClickHouseHelper:
                 'description': f'Таблица {table_name} содержит данные из Яндекс Метрики'
             }
         except Exception as e:
-            # Return minimal info if query fails
+            # Log the error but return minimal info
+            logging.error(f"Ошибка при получении информации о таблице: {e}")
+            logging.error(f"Убедитесь, что:")
+            logging.error(f"  1. Таблица '{table_name}' существует в базе данных '{self.database}'")
+            logging.error(f"  2. У пользователя '{self.user}' есть права на чтение структуры таблицы")
+            logging.error(f"  3. Параметры подключения к ClickHouse верны")
             return {
                 'database': self.database,
                 'table': table_name,
@@ -221,6 +254,14 @@ class ClickHouseHelper:
 
 def main():
     """Main function - example usage"""
+    
+    # Configure logging
+    log_level = os.getenv("LOG_LEVEL", "INFO")
+    logging.basicConfig(
+        level=getattr(logging, log_level.upper()),
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%H:%M:%S'
+    )
     
     # Load environment variables from .env file
     load_dotenv()
@@ -237,14 +278,15 @@ def main():
     CH_DATABASE = os.getenv("CLICKHOUSE_DATABASE", "default")
     CH_TABLE = os.getenv("CLICKHOUSE_TABLE", "metrika_hits")
     
-    # Initialize components
-    sql_generator = YandexGPTSQLGenerator(API_KEY, FOLDER_ID)
-    ch_helper = ClickHouseHelper(CH_HOST, CH_PORT, CH_USER, CH_PASSWORD, CH_DATABASE)
-    
     print("=== yaGPT to SQL Generator ===")
     print(f"База данных: {CH_DATABASE}")
     print(f"Таблица: {CH_TABLE}")
     print()
+    
+    # Initialize components
+    logging.info("Инициализация компонентов...")
+    sql_generator = YandexGPTSQLGenerator(API_KEY, FOLDER_ID)
+    ch_helper = ClickHouseHelper(CH_HOST, CH_PORT, CH_USER, CH_PASSWORD, CH_DATABASE)
     
     # Get table information
     print("Получение информации о таблице...")
