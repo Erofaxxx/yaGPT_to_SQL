@@ -40,18 +40,19 @@ CH_DATABASE = os.getenv("CLICKHOUSE_DATABASE", "default")
 CH_TABLE = os.getenv("CLICKHOUSE_TABLE", "metrika_hits")
 
 # SSL certificate configuration
-ssl_cert_path = os.getenv("CLICKHOUSE_SSL_CERT_PATH", "")
+# Result can be: string (cert path), None (system certs), or False (disabled)
+ssl_cert_config = os.getenv("CLICKHOUSE_SSL_CERT_PATH", "")
 
-if ssl_cert_path:
+if ssl_cert_config:
     # Use specified certificate file
-    CH_SSL_CERT = ssl_cert_path
+    CH_SSL_CERT = ssl_cert_config
 else:
     # Check old CLICKHOUSE_SSL_VERIFY for backwards compatibility
     ssl_verify_str = os.getenv("CLICKHOUSE_SSL_VERIFY", "true").lower()
     if ssl_verify_str in ["false", "0", "no", "off"]:
-        CH_SSL_CERT = False  # Disabled
+        CH_SSL_CERT = False  # Boolean False to disable
     else:
-        CH_SSL_CERT = None  # Use system certificates
+        CH_SSL_CERT = None  # None to use system certificates
 
 print(f"Configuration:")
 print(f"  Host: {CH_HOST}")

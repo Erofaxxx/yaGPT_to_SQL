@@ -128,9 +128,10 @@ class ClickHouseHelper:
             user: Database user
             password: Database password
             database: Database name
-            ssl_cert_path: Path to SSL certificate file for verification (e.g., 'YandexInternalRootCA.crt')
-                          If None or empty, uses default system certificates
-                          Set to False to disable SSL verification (not recommended)
+            ssl_cert_path: SSL certificate configuration:
+                          - String path (e.g., 'YandexInternalRootCA.crt') - uses custom certificate file
+                          - None or empty string - uses system certificates (default)
+                          - Boolean False - disables SSL verification (not recommended for production)
         """
         self.host = host
         self.port = port
@@ -138,15 +139,16 @@ class ClickHouseHelper:
         self.password = password
         self.database = database
         
-        # Handle SSL certificate path
+        # Handle SSL certificate configuration
+        # ssl_cert_path can be: string (cert path), None/empty (system certs), or False (disabled)
         if ssl_cert_path is False:
-            # Explicitly disabled
+            # Explicitly disabled with boolean False
             self.verify_ssl = False
         elif ssl_cert_path:
-            # Use provided certificate file
+            # Use provided certificate file (string path)
             self.verify_ssl = ssl_cert_path
         else:
-            # Default: use system certificates
+            # Default: use system certificates (None or empty string)
             self.verify_ssl = True
         
         # Construct base URL - handle if host already includes protocol
@@ -315,18 +317,19 @@ def main():
     
     # SSL certificate configuration
     # Priority: CLICKHOUSE_SSL_CERT_PATH > CLICKHOUSE_SSL_VERIFY
-    ssl_cert_path = os.getenv("CLICKHOUSE_SSL_CERT_PATH", "")
+    # Result can be: string (cert path), None (system certs), or False (disabled)
+    ssl_cert_config = os.getenv("CLICKHOUSE_SSL_CERT_PATH", "")
     
-    if ssl_cert_path:
+    if ssl_cert_config:
         # Use specified certificate file
-        CH_SSL_CERT = ssl_cert_path
+        CH_SSL_CERT = ssl_cert_config
     else:
         # Check old CLICKHOUSE_SSL_VERIFY for backwards compatibility
         ssl_verify_str = os.getenv("CLICKHOUSE_SSL_VERIFY", "true").lower()
         if ssl_verify_str in ["false", "0", "no", "off"]:
-            CH_SSL_CERT = False  # Disabled
+            CH_SSL_CERT = False  # Boolean False to disable
         else:
-            CH_SSL_CERT = None  # Use system certificates
+            CH_SSL_CERT = None  # None to use system certificates
     
     print("=== yaGPT to SQL Generator ===")
     print(f"База данных: {CH_DATABASE}")
